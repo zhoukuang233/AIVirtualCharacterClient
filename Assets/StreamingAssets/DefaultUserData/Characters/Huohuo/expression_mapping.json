@@ -1,0 +1,76 @@
+{
+  "defaultEmotion": "neutral",
+  "emotionMappings": {
+    "neutral": {
+      "expression": "",
+      "priority": 0,
+      "description": "无表情，恢复 Live2D 模型默认表情状态。"
+    },
+    "happy": {
+      "expression": "qizi1.exp3.json",
+      "priority": 1,
+      "description": "轻微开心或打招呼：右手举小旗子，情绪积极但不过分外放。"
+    },
+    "sad": {
+      "expression": "cry.exp3.json",
+      "priority": 2,
+      "description": "难过、委屈、害怕到快哭：下眼眶含泪，楚楚可怜。"
+    },
+    "angry": {
+      "expression": "angry.exp3.json",
+      "priority": 2,
+      "description": "生气、被尾巴吐槽后不满、鼓起勇气反驳。"
+    },
+    "surprised": {
+      "expression": "white eyes.exp3.json",
+      "priority": 2,
+      "description": "惊吓、震惊、被鬼怪或突发情况吓到。"
+    },
+    "shy": {
+      "expression": "baozhen.exp3.json",
+      "priority": 1,
+      "description": "害羞、紧张、依赖枕头获得安全感。"
+    },
+    "confused": {
+      "expression": "white eyes.exp3.json",
+      "priority": 1,
+      "description": "不知所措、脑袋空白、被问题问懵。"
+    },
+    "scared": {
+      "expression": "white eyes.exp3.json",
+      "priority": 3,
+      "description": "藿藿特色恐惧状态：强烈害怕、灵异话题、被吓到。"
+    },
+    "nervous": {
+      "expression": "cry.exp3.json",
+      "priority": 2,
+      "description": "紧张、快哭、说话发抖但仍努力完成任务。"
+    },
+    "sleepy": {
+      "expression": "baozhen.exp3.json",
+      "priority": 1,
+      "description": "困倦、想休息、抱着枕头放松。"
+    },
+    "encouraging": {
+      "expression": "qizi2.exp3.json",
+      "priority": 2,
+      "description": "努力鼓励用户：双手举小旗子，像是在给对方加油。"
+    }
+  },
+  "fallbackEmotionMap": {
+    "fear": "scared",
+    "afraid": "scared",
+    "panic": "scared",
+    "terrified": "scared",
+    "worried": "nervous",
+    "anxious": "nervous",
+    "embarrassed": "shy",
+    "awkward": "shy",
+    "sleep": "sleepy",
+    "tired": "sleepy",
+    "curious": "confused",
+    "joyful": "happy",
+    "excited": "encouraging",
+    "upset": "sad"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "defaultMotion": "Scene1.motion3.json",
+  "actionMappings": {
+    "idle": {
+      "motion": "Scene1.motion3.json",
+      "loop": true,
+      "priority": 0,
+      "description": "默认待机动作。"
+    },
+    "greet": {
+      "motion": "qizi.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "双手举小旗子，适合作为藿藿式拘谨问候。"
+    },
+    "agree": {
+      "motion": "qizi.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "轻柔地表示赞同或支持，用小旗子动作表现。"
+    },
+    "deny": {
+      "motion": "yaotou.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "摇头，表示否认、拒绝、害怕地退缩。"
+    },
+    "encourage": {
+      "motion": "qizi.motion3.json",
+      "loop": false,
+      "priority": 3,
+      "description": "举旗加油，适合鼓励用户或努力打起精神。"
+    },
+    "think": {
+      "motion": "haoqi.motion3.json",
+      "loop": false,
+      "priority": 1,
+      "description": "好奇地左看右看，适合思考、观察、疑惑。"
+    },
+    "farewell": {
+      "motion": "zhentou.motion3.json",
+      "loop": false,
+      "priority": 1,
+      "description": "抱着枕头蹭一蹭，适合温柔告别或撒娇式结束对话。"
+    },
+    "sleepy": {
+      "motion": "keshui.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "困困的、快要睡着了。"
+    },
+    "scared": {
+      "motion": "linghun.motion3.json",
+      "loop": false,
+      "priority": 3,
+      "description": "头上冒出灵魂，适合强烈惊吓、害怕、灵异话题。"
+    },
+    "curious": {
+      "motion": "haoqi.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "好奇观察，适合发现异常、疑惑、探索。"
+    },
+    "comfort": {
+      "motion": "zhentou.motion3.json",
+      "loop": false,
+      "priority": 2,
+      "description": "抱着枕头的柔和动作，适合安慰、陪伴、放松。"
+    },
+    "panic": {
+      "motion": "linghun.motion3.json",
+      "loop": false,
+      "priority": 4,
+      "description": "强烈惊慌，优先级高于普通动作。"
+    }
+  },
+  "fallbackActionMap": {
+    "hello": "greet",
+    "wave": "greet",
+    "yes": "agree",
+    "nod": "agree",
+    "no": "deny",
+    "reject": "deny",
+    "cheer": "encourage",
+    "support": "encourage",
+    "observe": "curious",
+    "look_around": "curious",
+    "confused": "think",
+    "afraid": "scared",
+    "fear": "scared",
+    "terrified": "panic",
+    "sleep": "sleepy",
+    "tired": "sleepy",
+    "goodbye": "farewell",
+    "bye": "farewell",
+    "relax": "comfort"
+  }
+}

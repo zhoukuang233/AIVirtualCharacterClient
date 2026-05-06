@@ -3,7 +3,7 @@ using Project.Character;
 using Project.Infrastructure;
 using UnityEngine;
 
-namespace Project.App
+namespace Project.Test
 {
     public class CharacterPackageDebugTester : MonoBehaviour
     {
