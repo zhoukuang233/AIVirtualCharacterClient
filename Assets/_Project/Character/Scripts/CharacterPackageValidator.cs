@@ -7,17 +7,32 @@ namespace Project.Character
 {
     /// <summary>
     /// 角色包校验器。
-    ///
-    /// 职责：
-    /// 1. 检查 character.json 是否存在并可解析。
-    /// 2. 检查 persona、model3.json、mapping 文件是否存在。
-    /// 3. 检查 expression_mapping.json 中声明的表情文件是否真实存在。
-    /// 4. 检查 motion_mapping.json 中声明的动作文件是否真实存在。
-    /// 5. 检查 defaultEmotion / defaultMotion 是否合理。
-    ///
-    /// 注意：
-    /// Validator 不负责加载角色进入游戏，只负责报告角色包是否完整。
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 职责：检查角色包是否满足当前 Unity 前端 MVP 的最低运行要求，包括 character.json、persona、
+    /// model3.json、expression_mapping.json、motion_mapping.json 以及映射表中声明的资源文件。
+    /// </para>
+    /// <para>
+    /// 本类不负责把角色加载进游戏，也不直接控制 Live2D。校验通过后，再交给
+    /// <see cref="CharacterPackageLoader"/> 加载。
+    /// </para>
+    /// <para>
+    /// 使用方式：
+    /// <code>
+    /// var validator = new CharacterPackageValidator();
+    /// CharacterValidationResult result = validator.Validate(packageInfo);
+    /// Debug.Log(result.ToString());
+    /// </code>
+    /// </para>
+    /// <para>
+    /// 对外暴露方法：<see cref="Validate"/>。
+    /// </para>
+    /// <para>
+    /// TODO: 后续可以增加角色包 schemaVersion，并根据版本执行不同的校验规则。
+    /// TODO: 后续可以增加 warning/error 的错误码，方便 DeveloperConsole 分类展示和论文实验统计。
+    /// </para>
+    /// </remarks>
     public class CharacterPackageValidator
     {
         private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
@@ -26,6 +41,11 @@ namespace Project.Character
             NullValueHandling = NullValueHandling.Ignore
         };
 
+        /// <summary>
+        /// 校验一个角色包。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <returns>返回校验结果，包含错误和警告。</returns>
         public CharacterValidationResult Validate(CharacterPackageInfo packageInfo)
         {
             var result = new CharacterValidationResult();
@@ -77,9 +97,12 @@ namespace Project.Character
             return result;
         }
 
-        private static void ValidateBasicFields(
-            CharacterDefinition definition,
-            CharacterValidationResult result)
+        /// <summary>
+        /// 校验 character.json 中的基础字段。
+        /// </summary>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
+        private static void ValidateBasicFields(CharacterDefinition definition, CharacterValidationResult result)
         {
             if (string.IsNullOrWhiteSpace(definition.CharacterId))
             {
@@ -97,6 +120,12 @@ namespace Project.Character
             }
         }
 
+        /// <summary>
+        /// 校验 Live2D model3.json 配置和文件是否存在。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
         private static void ValidateModel(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -115,13 +144,18 @@ namespace Project.Character
             }
 
             string modelPath = packageInfo.ResolvePath(definition.Model.Model3JsonPath);
-
             if (!File.Exists(modelPath))
             {
                 result.AddError($"Live2D model3.json 文件不存在：{modelPath}");
             }
         }
 
+        /// <summary>
+        /// 校验 persona.txt 配置和文件是否存在。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
         private static void ValidatePersona(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -140,13 +174,21 @@ namespace Project.Character
             }
 
             string personaPath = packageInfo.ResolvePath(definition.Persona.PersonaFile);
-
             if (!File.Exists(personaPath))
             {
                 result.AddError($"persona 文件不存在：{personaPath}");
             }
         }
 
+        /// <summary>
+        /// 校验 Prompt 模板文件是否存在。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
+        /// <remarks>
+        /// 当前阶段 Prompt 模板缺失只作为警告，因为后续也可能完全由后端 PromptManager 管理。
+        /// </remarks>
         private static void ValidatePromptTemplate(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -154,40 +196,51 @@ namespace Project.Character
         {
             string promptTemplateFile = "prompt_template.txt";
 
-            if (definition.Persona != null &&
-                !string.IsNullOrWhiteSpace(definition.Persona.PromptTemplateFile))
+            if (definition.Persona != null && !string.IsNullOrWhiteSpace(definition.Persona.PromptTemplateFile))
             {
                 promptTemplateFile = definition.Persona.PromptTemplateFile;
             }
 
             string promptPath = packageInfo.ResolvePath(promptTemplateFile);
-
             if (!File.Exists(promptPath))
             {
                 result.AddWarning($"未找到 prompt_template.txt：{promptPath}。如果 Prompt 完全由后端管理，可以暂时忽略。");
             }
         }
 
+        /// <summary>
+        /// 校验语音配置文件是否存在。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
+        /// <remarks>
+        /// MVP 阶段语音配置缺失只作为警告，因为当前前端尚未真正调用 TTS。
+        /// </remarks>
         private static void ValidateVoiceConfig(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
             CharacterValidationResult result)
         {
-            if (definition.Voice == null ||
-                string.IsNullOrWhiteSpace(definition.Voice.VoiceConfigFile))
+            if (definition.Voice == null || string.IsNullOrWhiteSpace(definition.Voice.VoiceConfigFile))
             {
                 result.AddWarning("未配置 voice.voiceConfigFile。MVP 阶段可以暂时忽略。");
                 return;
             }
 
             string voicePath = packageInfo.ResolvePath(definition.Voice.VoiceConfigFile);
-
             if (!File.Exists(voicePath))
             {
                 result.AddWarning($"voice_config.json 文件不存在：{voicePath}。MVP 阶段可以暂时忽略。");
             }
         }
 
+        /// <summary>
+        /// 校验 expression_mapping.json 以及其中声明的表情文件。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
         private static void ValidateExpressionMapping(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -206,7 +259,6 @@ namespace Project.Character
             }
 
             string mappingPath = packageInfo.ResolvePath(definition.Mapping.ExpressionMappingFile);
-
             if (!File.Exists(mappingPath))
             {
                 result.AddError($"expression_mapping.json 不存在：{mappingPath}");
@@ -234,8 +286,7 @@ namespace Project.Character
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(config.DefaultEmotion) &&
-                !config.EmotionMappings.ContainsKey(config.DefaultEmotion))
+            if (!string.IsNullOrWhiteSpace(config.DefaultEmotion) && !config.EmotionMappings.ContainsKey(config.DefaultEmotion))
             {
                 result.AddError($"defaultEmotion={config.DefaultEmotion} 未出现在 emotionMappings 中。");
             }
@@ -259,13 +310,13 @@ namespace Project.Character
 
                 if (string.IsNullOrWhiteSpace(entry.Expression))
                 {
-                    result.AddError($"emotion={emotion} 的 expression 为空。");
+                    // neutral 允许为空字符串，表示“不绑定 exp3.json，恢复模型默认表情”。
+                    // 这里记为 warning 而不是 error，避免合法的“无表情”配置被判定为角色包不可用。
+                    result.AddWarning($"emotion={emotion} 的 expression 为空。若该 emotion 表示无表情/默认脸，可以忽略。");
                     continue;
                 }
 
-                string resolvedExpressionPath;
-
-                if (!TryResolveExpressionFile(packageInfo, entry.Expression, out resolvedExpressionPath))
+                if (!TryResolveExpressionFile(packageInfo, entry.Expression, out _))
                 {
                     result.AddError($"emotion={emotion} 指向的表情文件不存在：{entry.Expression}");
                 }
@@ -278,6 +329,12 @@ namespace Project.Character
                 result);
         }
 
+        /// <summary>
+        /// 校验 motion_mapping.json 以及其中声明的动作文件。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="result">校验结果对象。</param>
         private static void ValidateMotionMapping(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -296,7 +353,6 @@ namespace Project.Character
             }
 
             string mappingPath = packageInfo.ResolvePath(definition.Mapping.MotionMappingFile);
-
             if (!File.Exists(mappingPath))
             {
                 result.AddError($"motion_mapping.json 不存在：{mappingPath}");
@@ -324,8 +380,7 @@ namespace Project.Character
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(config.DefaultMotion) &&
-                !ContainsMotionFile(config.ActionMappings, config.DefaultMotion))
+            if (!string.IsNullOrWhiteSpace(config.DefaultMotion) && !ContainsMotionFile(config.ActionMappings, config.DefaultMotion))
             {
                 result.AddWarning($"defaultMotion={config.DefaultMotion} 没有被任何 actionMappings 引用。");
             }
@@ -353,9 +408,7 @@ namespace Project.Character
                     continue;
                 }
 
-                string resolvedMotionPath;
-
-                if (!TryResolveMotionFile(packageInfo, entry.Motion, out resolvedMotionPath))
+                if (!TryResolveMotionFile(packageInfo, entry.Motion, out _))
                 {
                     result.AddError($"action={action} 指向的动作文件不存在：{entry.Motion}");
                 }
@@ -368,9 +421,17 @@ namespace Project.Character
                 result);
         }
 
-        private static void ValidateFallbackMap<T>(
+        /// <summary>
+        /// 校验 fallback 映射表的目标标签是否存在于主映射表中。
+        /// </summary>
+        /// <typeparam name="TEntry">主映射表的值类型。</typeparam>
+        /// <param name="fallbackMap">fallback 映射表，例如 excited -&gt; happy。</param>
+        /// <param name="targetMappings">主映射表。</param>
+        /// <param name="mapName">用于日志输出的映射表名称。</param>
+        /// <param name="result">校验结果对象。</param>
+        private static void ValidateFallbackMap<TEntry>(
             Dictionary<string, string> fallbackMap,
-            Dictionary<string, T> targetMappings,
+            Dictionary<string, TEntry> targetMappings,
             string mapName,
             CharacterValidationResult result)
         {
@@ -403,9 +464,13 @@ namespace Project.Character
             }
         }
 
-        private static bool ContainsMotionFile(
-            Dictionary<string, MotionMappingEntry> actionMappings,
-            string motionFileName)
+        /// <summary>
+        /// 判断动作映射表中是否存在指定 motion 文件。
+        /// </summary>
+        /// <param name="actionMappings">动作映射表。</param>
+        /// <param name="motionFileName">要查找的 motion 文件名。</param>
+        /// <returns>存在返回 true，否则返回 false。</returns>
+        private static bool ContainsMotionFile(Dictionary<string, MotionMappingEntry> actionMappings, string motionFileName)
         {
             foreach (KeyValuePair<string, MotionMappingEntry> pair in actionMappings)
             {
@@ -414,7 +479,7 @@ namespace Project.Character
                     continue;
                 }
 
-                if (pair.Value.Motion == motionFileName)
+                if (string.Equals(pair.Value.Motion, motionFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -423,6 +488,13 @@ namespace Project.Character
             return false;
         }
 
+        /// <summary>
+        /// 解析表情文件路径。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="expressionPathOrFileName">表情文件名或角色包内相对路径。</param>
+        /// <param name="resolvedPath">解析后的候选路径。</param>
+        /// <returns>文件存在返回 true，否则返回 false。</returns>
         private static bool TryResolveExpressionFile(
             CharacterPackageInfo packageInfo,
             string expressionPathOrFileName,
@@ -435,6 +507,13 @@ namespace Project.Character
                 out resolvedPath);
         }
 
+        /// <summary>
+        /// 解析动作文件路径。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="motionPathOrFileName">动作文件名或角色包内相对路径。</param>
+        /// <param name="resolvedPath">解析后的候选路径。</param>
+        /// <returns>文件存在返回 true，否则返回 false。</returns>
         private static bool TryResolveMotionFile(
             CharacterPackageInfo packageInfo,
             string motionPathOrFileName,
@@ -448,15 +527,18 @@ namespace Project.Character
         }
 
         /// <summary>
-        /// 解析资源文件路径。
-        ///
-        /// 支持两种写法：
-        /// 1. "happy.exp3.json"
-        ///    自动尝试 live2d/expressions/happy.exp3.json
-        ///
-        /// 2. "live2d/expressions/happy.exp3.json"
-        ///    直接按角色包根目录下的相对路径解析
+        /// 解析角色包内资源文件路径。
         /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="pathOrFileName">文件名、相对路径或绝对路径。</param>
+        /// <param name="standardRelativeFolder">标准相对目录，例如 <c>live2d/expressions</c>。</param>
+        /// <param name="resolvedPath">解析出的候选路径。即使文件不存在，也会返回第一个候选路径，便于错误提示。</param>
+        /// <returns>找到真实文件返回 true，否则返回 false。</returns>
+        /// <remarks>
+        /// 支持两种常见写法：
+        /// 1. <c>happy.exp3.json</c>：自动尝试标准目录。
+        /// 2. <c>live2d/expressions/happy.exp3.json</c>：按角色包根目录下相对路径解析。
+        /// </remarks>
         private static bool TryResolveResourceFile(
             CharacterPackageInfo packageInfo,
             string pathOrFileName,
@@ -495,6 +577,14 @@ namespace Project.Character
             return false;
         }
 
+        /// <summary>
+        /// 尝试读取并反序列化 JSON 文件，把错误写入校验结果。
+        /// </summary>
+        /// <typeparam name="T">目标 DTO 类型。</typeparam>
+        /// <param name="path">JSON 文件路径。</param>
+        /// <param name="result">校验结果对象。</param>
+        /// <param name="displayName">用于错误提示的文件显示名。</param>
+        /// <returns>解析成功返回对象；失败返回 null。</returns>
         private static T TryLoadJson<T>(
             string path,
             CharacterValidationResult result,
@@ -503,7 +593,6 @@ namespace Project.Character
             try
             {
                 string json = File.ReadAllText(path);
-
                 T data = JsonConvert.DeserializeObject<T>(json, JsonSettings);
 
                 if (data == null)

@@ -8,20 +8,36 @@ namespace Project.Presentation
 {
     /// <summary>
     /// 行为映射解析器。
-    ///
-    /// 负责把 LLM 输出的语义标签：
-    /// emotion = happy
-    /// action = greet
-    ///
-    /// 解析成当前角色包中的具体表现资源：
-    /// happy.exp3.json
-    /// wave.motion3.json
-    ///
-    /// 注意：
-    /// 1. 本类不调用 Live2D。
-    /// 2. 本类不关心 LLM。
-    /// 3. 本类只做“语义标签 -> 角色资源文件”的转换。
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 该类负责把 LLM 或测试工具输出的语义标签转换成当前角色包中的具体表现资源。
+    /// 例如：<c>emotion=happy</c> 解析成 <c>happy.exp3.json</c>，
+    /// <c>action=greet</c> 解析成 <c>wave.motion3.json</c>。
+    /// </para>
+    /// <para>
+    /// 重要边界：
+    /// 1. 本类不调用 Live2D。
+    /// 2. 本类不调用 LLM。
+    /// 3. 本类只做“语义标签 -> 角色资源文件”的转换。
+    /// </para>
+    /// <para>
+    /// 使用方式：
+    /// <code>
+    /// var resolver = new BehaviorMappingResolver(characterRootPath);
+    /// PresentationResolveResult result = resolver.Resolve("happy", "greet", "cheerful");
+    /// List&lt;PresentationCommand&gt; commands = result.ToCommands();
+    /// </code>
+    /// </para>
+    /// <para>
+    /// 对外暴露方法：<see cref="Reload"/> 和 <see cref="Resolve"/>。
+    /// </para>
+    /// <para>
+    /// TODO: 后续可以把内部 MappingConfig DTO 复用 Character 模块中的 DTO，避免两套结构重复维护。
+    /// TODO: 后续可以增加映射表热重载，用于 DeveloperConsole 修改 JSON 后立即刷新表现结果。
+    /// TODO: 后续可以把 Debug.Log 改为结构化日志事件，交给 ExperimentLogging 统一记录。
+    /// </para>
+    /// </remarks>
     public class BehaviorMappingResolver
     {
         private readonly string _characterRootPath;
@@ -31,6 +47,12 @@ namespace Project.Presentation
         private ExpressionMappingConfig _expressionConfig;
         private MotionMappingConfig _motionConfig;
 
+        /// <summary>
+        /// 创建行为映射解析器，并立即读取当前角色的表情和动作映射表。
+        /// </summary>
+        /// <param name="characterRootPath">角色包根目录。</param>
+        /// <param name="expressionMappingFileName">表情映射表文件名，默认 expression_mapping.json。</param>
+        /// <param name="motionMappingFileName">动作映射表文件名，默认 motion_mapping.json。</param>
         public BehaviorMappingResolver(
             string characterRootPath,
             string expressionMappingFileName = "expression_mapping.json",
@@ -44,9 +66,11 @@ namespace Project.Presentation
         }
 
         /// <summary>
-        /// 重新读取当前角色的映射表。
-        /// 切换角色后，应重新创建 Resolver 或调用 Reload。
+        /// 重新读取当前角色的表情和动作映射表。
         /// </summary>
+        /// <remarks>
+        /// 切换角色后，可以重新创建 Resolver，也可以在角色包路径不变、映射表内容变化时调用该方法。
+        /// </remarks>
         public void Reload()
         {
             _expressionConfig = LoadJsonConfig<ExpressionMappingConfig>(_expressionMappingPath);
@@ -66,9 +90,14 @@ namespace Project.Presentation
         }
 
         /// <summary>
-        /// 核心入口：
-        /// 输入 emotion/action/voiceStyle，输出 PresentationResolveResult。
+        /// 解析一次表现标签。
         /// </summary>
+        /// <param name="emotion">输入 emotion 标签，例如 happy、sad、neutral。</param>
+        /// <param name="action">输入 action 标签，例如 greet、idle、deny。</param>
+        /// <param name="voiceStyle">输入 voiceStyle 标签；为空时使用 normal。</param>
+        /// <returns>
+        /// 返回 <see cref="PresentationResolveResult"/>，其中包含输入标签、解析后标签、资源文件路径、fallback 信息和文件存在性。
+        /// </returns>
         public PresentationResolveResult Resolve(string emotion, string action, string voiceStyle = "normal")
         {
             var result = new PresentationResolveResult
@@ -83,10 +112,13 @@ namespace Project.Presentation
             ResolveMotion(result);
 
             Debug.Log(result.ToDebugText());
-
             return result;
         }
 
+        /// <summary>
+        /// 解析表情标签。
+        /// </summary>
+        /// <param name="result">需要写入表情解析结果的对象。</param>
         private void ResolveExpression(PresentationResolveResult result)
         {
             string requestedEmotion = result.InputEmotion;
@@ -101,14 +133,12 @@ namespace Project.Presentation
             ExpressionMappingItem item;
             string actualEmotion;
 
-            // 1. 直接命中 emotionMappings。
             if (TryGetExpressionItem(requestedEmotion, out actualEmotion, out item))
             {
                 FillExpressionResult(result, actualEmotion, item);
                 return;
             }
 
-            // 2. 查 fallbackEmotionMap，例如 excited -> happy。
             string fallbackEmotion;
             if (TryGetFallbackTarget(requestedEmotion, _expressionConfig.fallbackEmotionMap, out fallbackEmotion))
             {
@@ -121,7 +151,6 @@ namespace Project.Presentation
                 }
             }
 
-            // 3. 使用 defaultEmotion，例如 neutral。
             string defaultEmotion = NormalizeTag(_expressionConfig.defaultEmotion);
             if (TryGetExpressionItem(defaultEmotion, out actualEmotion, out item))
             {
@@ -131,7 +160,6 @@ namespace Project.Presentation
                 return;
             }
 
-            // 4. 如果配置了 defaultExpression，则直接使用文件名。
             if (!string.IsNullOrWhiteSpace(_expressionConfig.defaultExpression))
             {
                 result.ResolvedEmotion = defaultEmotion;
@@ -144,12 +172,15 @@ namespace Project.Presentation
                 return;
             }
 
-            // 5. 完全解析失败。
             result.ExpressionFallbackUsed = true;
             result.ExpressionFallbackReason = $"emotion={requestedEmotion} 未命中，并且没有可用默认表情。";
             Debug.LogWarning($"[BehaviorMappingResolver] {result.ExpressionFallbackReason}");
         }
 
+        /// <summary>
+        /// 解析动作标签。
+        /// </summary>
+        /// <param name="result">需要写入动作解析结果的对象。</param>
         private void ResolveMotion(PresentationResolveResult result)
         {
             string requestedAction = result.InputAction;
@@ -164,14 +195,12 @@ namespace Project.Presentation
             MotionMappingItem item;
             string actualAction;
 
-            // 1. 直接命中 actionMappings。
             if (TryGetMotionItem(requestedAction, out actualAction, out item))
             {
                 FillMotionResult(result, actualAction, item);
                 return;
             }
 
-            // 2. 查 fallbackActionMap，例如 hello -> greet。
             string fallbackAction;
             if (TryGetFallbackTarget(requestedAction, _motionConfig.fallbackActionMap, out fallbackAction))
             {
@@ -184,7 +213,6 @@ namespace Project.Presentation
                 }
             }
 
-            // 3. 优先尝试 idle。
             if (TryGetMotionItem("idle", out actualAction, out item))
             {
                 result.MotionFallbackUsed = true;
@@ -193,7 +221,6 @@ namespace Project.Presentation
                 return;
             }
 
-            // 4. 使用 defaultMotion 文件名。
             if (!string.IsNullOrWhiteSpace(_motionConfig.defaultMotion))
             {
                 if (TryFindMotionItemByFileName(_motionConfig.defaultMotion, out actualAction, out item))
@@ -215,12 +242,17 @@ namespace Project.Presentation
                 return;
             }
 
-            // 5. 完全解析失败。
             result.MotionFallbackUsed = true;
             result.MotionFallbackReason = $"action={requestedAction} 未命中，并且没有可用默认动作。";
             Debug.LogWarning($"[BehaviorMappingResolver] {result.MotionFallbackReason}");
         }
 
+        /// <summary>
+        /// 把表情映射项写入解析结果。
+        /// </summary>
+        /// <param name="result">解析结果对象。</param>
+        /// <param name="resolvedEmotion">实际命中的 emotion 标签。</param>
+        /// <param name="item">表情映射项。</param>
         private void FillExpressionResult(
             PresentationResolveResult result,
             string resolvedEmotion,
@@ -228,8 +260,16 @@ namespace Project.Presentation
         {
             result.ResolvedEmotion = resolvedEmotion;
             result.ExpressionFileName = item.expression;
-            result.ExpressionFilePath = BuildExpressionPath(item.expression);
             result.ExpressionPriority = item.priority;
+
+            if (string.IsNullOrWhiteSpace(item.expression))
+            {
+                result.ExpressionFilePath = string.Empty;
+                result.ExpressionFileExists = true;
+                return;
+            }
+
+            result.ExpressionFilePath = BuildExpressionPath(item.expression);
             result.ExpressionFileExists = File.Exists(result.ExpressionFilePath);
 
             if (!result.ExpressionFileExists)
@@ -238,6 +278,12 @@ namespace Project.Presentation
             }
         }
 
+        /// <summary>
+        /// 把动作映射项写入解析结果。
+        /// </summary>
+        /// <param name="result">解析结果对象。</param>
+        /// <param name="resolvedAction">实际命中的 action 标签。</param>
+        /// <param name="item">动作映射项。</param>
         private void FillMotionResult(
             PresentationResolveResult result,
             string resolvedAction,
@@ -258,13 +304,9 @@ namespace Project.Presentation
 
         /// <summary>
         /// 构建表情文件路径。
-        ///
-        /// 优先使用标准路径：
-        /// characterRoot/live2d/expressions/xxx.exp3.json
-        ///
-        /// 如果标准路径不存在，则在 live2d 目录下递归搜索同名文件。
-        /// 这样可以兼容不同 Live2D 模型导出的目录结构。
         /// </summary>
+        /// <param name="expressionFileName">表情文件名。</param>
+        /// <returns>优先返回标准路径；若标准路径不存在但递归找到同名文件，则返回找到的路径。</returns>
         private string BuildExpressionPath(string expressionFileName)
         {
             string standardPath = Path.Combine(_characterRootPath, "live2d", "expressions", expressionFileName);
@@ -276,22 +318,20 @@ namespace Project.Presentation
 
             string live2dRootPath = Path.Combine(_characterRootPath, "live2d");
             string foundPath = FindFileRecursively(live2dRootPath, expressionFileName);
-
             return string.IsNullOrWhiteSpace(foundPath) ? standardPath : foundPath;
         }
 
         /// <summary>
         /// 构建动作文件路径。
-        ///
-        /// 优先使用标准路径：
-        /// characterRoot/live2d/motions/xxx.motion3.json
-        ///
-        /// 如果标准路径不存在，则在 live2d 目录下递归搜索同名文件。
-        /// 当前阶段只用于 Debug 和文件存在性检查，不负责真实播放 Live2D。
         /// </summary>
+        /// <param name="motionFileName">动作文件名。</param>
+        /// <returns>优先返回标准路径；若标准路径不存在但递归找到同名文件，则返回找到的路径。</returns>
+        /// <remarks>
+        /// 标准路径优先按 <c>live2d/motions</c> 查找，同时也会递归搜索 live2d 目录，兼容不同模型导出的目录结构。
+        /// </remarks>
         private string BuildMotionPath(string motionFileName)
         {
-            string standardPath = Path.Combine(_characterRootPath, "live2d", "animations", motionFileName);
+            string standardPath = Path.Combine(_characterRootPath, "live2d", "motions", motionFileName);
 
             if (File.Exists(standardPath))
             {
@@ -300,20 +340,15 @@ namespace Project.Presentation
 
             string live2dRootPath = Path.Combine(_characterRootPath, "live2d");
             string foundPath = FindFileRecursively(live2dRootPath, motionFileName);
-
             return string.IsNullOrWhiteSpace(foundPath) ? standardPath : foundPath;
         }
 
         /// <summary>
         /// 在指定根目录下递归查找文件。
-        ///
-        /// 参数：
-        /// rootPath：要搜索的根目录。
-        /// fileName：要查找的文件名，例如 qizi.motion3.json。
-        ///
-        /// 返回：
-        /// 如果找到，返回完整路径；如果找不到，返回 null。
         /// </summary>
+        /// <param name="rootPath">要搜索的根目录。</param>
+        /// <param name="fileName">要查找的文件名，例如 qizi.motion3.json。</param>
+        /// <returns>如果找到，返回完整路径；如果找不到，返回 null。</returns>
         private string FindFileRecursively(string rootPath, string fileName)
         {
             if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(fileName))
@@ -327,7 +362,6 @@ namespace Project.Presentation
             }
 
             string[] files = Directory.GetFiles(rootPath, fileName, SearchOption.AllDirectories);
-
             if (files == null || files.Length == 0)
             {
                 return null;
@@ -336,6 +370,13 @@ namespace Project.Presentation
             return files[0];
         }
 
+        /// <summary>
+        /// 从表情映射表中查找指定 emotion。
+        /// </summary>
+        /// <param name="emotion">目标 emotion 标签。</param>
+        /// <param name="actualEmotion">实际命中的 emotion key。</param>
+        /// <param name="item">命中的映射项。</param>
+        /// <returns>命中有效映射项返回 true，否则返回 false。</returns>
         private bool TryGetExpressionItem(
             string emotion,
             out string actualEmotion,
@@ -355,13 +396,20 @@ namespace Project.Presentation
                 {
                     actualEmotion = pair.Key;
                     item = pair.Value;
-                    return item != null && !string.IsNullOrWhiteSpace(item.expression);
+                    return item != null;
                 }
             }
 
             return false;
         }
 
+        /// <summary>
+        /// 从动作映射表中查找指定 action。
+        /// </summary>
+        /// <param name="action">目标 action 标签。</param>
+        /// <param name="actualAction">实际命中的 action key。</param>
+        /// <param name="item">命中的映射项。</param>
+        /// <returns>命中有效映射项返回 true，否则返回 false。</returns>
         private bool TryGetMotionItem(
             string action,
             out string actualAction,
@@ -388,6 +436,13 @@ namespace Project.Presentation
             return false;
         }
 
+        /// <summary>
+        /// 根据 motion 文件名反查 action 映射项。
+        /// </summary>
+        /// <param name="motionFileName">motion3.json 文件名。</param>
+        /// <param name="actualAction">命中的 action key。</param>
+        /// <param name="item">命中的映射项。</param>
+        /// <returns>找到返回 true，否则返回 false。</returns>
         private bool TryFindMotionItemByFileName(
             string motionFileName,
             out string actualAction,
@@ -419,6 +474,13 @@ namespace Project.Presentation
             return false;
         }
 
+        /// <summary>
+        /// 从 fallback 映射表中查找目标标签。
+        /// </summary>
+        /// <param name="inputTag">输入标签。</param>
+        /// <param name="fallbackMap">fallback 映射表。</param>
+        /// <param name="fallbackTarget">查找到的目标标签。</param>
+        /// <returns>找到可用目标标签返回 true，否则返回 false。</returns>
         private bool TryGetFallbackTarget(
             string inputTag,
             Dictionary<string, string> fallbackMap,
@@ -443,6 +505,12 @@ namespace Project.Presentation
             return false;
         }
 
+        /// <summary>
+        /// 读取 JSON 配置文件。
+        /// </summary>
+        /// <typeparam name="T">目标配置类型。</typeparam>
+        /// <param name="path">JSON 文件路径。</param>
+        /// <returns>解析成功返回配置对象；失败返回 null。</returns>
         private static T LoadJsonConfig<T>(string path) where T : class
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -468,6 +536,11 @@ namespace Project.Presentation
             }
         }
 
+        /// <summary>
+        /// 标准化标签文本。
+        /// </summary>
+        /// <param name="tag">原始标签。</param>
+        /// <returns>去掉首尾空白并转成小写后的标签；空值返回空字符串。</returns>
         private static string NormalizeTag(string tag)
         {
             if (string.IsNullOrWhiteSpace(tag))
@@ -478,65 +551,72 @@ namespace Project.Presentation
             return tag.Trim().ToLowerInvariant();
         }
 
+        /// <summary>
+        /// 表情映射表配置。
+        /// </summary>
         private class ExpressionMappingConfig
         {
             public string defaultEmotion = "neutral";
 
-            // 默认表情文件。
-            //
-            // 注意：
-            // 对于 Cubism Live2D 来说，无表情状态可以不绑定任何 exp3.json。
-            // 因此这里不能默认写死 normal.exp3.json。
-            // 空字符串表示：恢复模型默认表情状态。
+            /// <summary>
+            /// 默认表情文件。
+            /// </summary>
+            /// <remarks>
+            /// 空字符串表示恢复模型默认表情状态，而不是强制绑定 normal.exp3.json。
+            /// </remarks>
             public string defaultExpression = string.Empty;
 
-            public Dictionary<string, ExpressionMappingItem> emotionMappings =
-                new Dictionary<string, ExpressionMappingItem>();
-
-            // 可选字段：例如 excited -> happy。
-            public Dictionary<string, string> fallbackEmotionMap =
-                new Dictionary<string, string>();
+            public Dictionary<string, ExpressionMappingItem> emotionMappings = new Dictionary<string, ExpressionMappingItem>();
+            public Dictionary<string, string> fallbackEmotionMap = new Dictionary<string, string>();
         }
 
+        /// <summary>
+        /// 单个 emotion 到表情文件的映射项。
+        /// </summary>
         private class ExpressionMappingItem
         {
-            // 表情文件名。
-            //
-            // 允许为空字符串。
-            // 空字符串表示：不使用任何 exp3.json，恢复 Live2D 模型默认表情状态。
+            /// <summary>
+            /// 表情文件名。允许为空字符串，表示恢复 Live2D 默认表情状态。
+            /// </summary>
             public string expression = string.Empty;
 
             public int priority;
 
-            // 映射说明字段。
-            // 主要用于开发者控制台展示、调试和论文说明，不参与核心解析逻辑。
+            /// <summary>
+            /// 映射说明字段，主要用于开发者控制台展示、调试和论文说明。
+            /// </summary>
             public string description;
         }
 
+        /// <summary>
+        /// 动作映射表配置。
+        /// </summary>
         private class MotionMappingConfig
         {
-            // 默认动作文件。
-            //
-            // 不建议在代码中写死 idle.motion3.json。
-            // 不同 Live2D 模型的默认动作命名可能不同，例如你的模型是 Scene1.motion3.json。
+            /// <summary>
+            /// 默认动作文件。
+            /// </summary>
+            /// <remarks>
+            /// 不同 Live2D 模型的默认动作命名可能不同，因此不在代码中写死 idle.motion3.json。
+            /// </remarks>
             public string defaultMotion = string.Empty;
 
-            public Dictionary<string, MotionMappingItem> actionMappings =
-                new Dictionary<string, MotionMappingItem>();
-
-            // 可选字段：例如 hello -> greet。
-            public Dictionary<string, string> fallbackActionMap =
-                new Dictionary<string, string>();
+            public Dictionary<string, MotionMappingItem> actionMappings = new Dictionary<string, MotionMappingItem>();
+            public Dictionary<string, string> fallbackActionMap = new Dictionary<string, string>();
         }
 
+        /// <summary>
+        /// 单个 action 到动作文件的映射项。
+        /// </summary>
         private class MotionMappingItem
         {
             public string motion;
             public bool loop;
             public int priority;
 
-            // 映射说明字段。
-            // 主要用于开发者控制台展示、调试和论文说明，不参与核心解析逻辑。
+            /// <summary>
+            /// 映射说明字段，主要用于开发者控制台展示、调试和论文说明。
+            /// </summary>
             public string description;
         }
     }

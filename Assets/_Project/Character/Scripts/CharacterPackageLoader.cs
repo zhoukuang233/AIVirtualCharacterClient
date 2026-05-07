@@ -6,18 +6,44 @@ namespace Project.Character
 {
     /// <summary>
     /// 角色包加载器。
-    ///
-    /// 职责：
-    /// 1. 读取 character.json。
-    /// 2. 根据 character.json 读取 persona、prompt_template、mapping、voice_config。
-    /// 3. 返回 CharacterPackageData。
-    ///
-    /// 注意：
-    /// Loader 只负责加载，不负责完整校验。
-    /// 完整校验交给 CharacterPackageValidator。
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 职责：读取一个角色包中的 <c>character.json</c>，并根据其中的配置继续读取 persona、
+    /// prompt_template、expression_mapping、motion_mapping 和 voice_config 等文件，最终返回
+    /// <see cref="CharacterPackageData"/>。
+    /// </para>
+    /// <para>
+    /// 本类只负责加载，不负责完整性校验。完整性校验请使用 <see cref="CharacterPackageValidator"/>。
+    /// 这样可以让 DeveloperConsole 先扫描和展示角色包，即使某些文件缺失也能给出可读错误。
+    /// </para>
+    /// <para>
+    /// 使用方式：
+    /// <code>
+    /// var loader = new CharacterPackageLoader();
+    /// CharacterPackageData data = loader.Load(packageInfo);
+    /// </code>
+    /// 或者：
+    /// <code>
+    /// bool ok = loader.TryLoad(packageInfo, out CharacterPackageData data, out string error);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// 对外暴露方法：<see cref="Load"/> 和 <see cref="TryLoad"/>。
+    /// </para>
+    /// <para>
+    /// TODO: 后续可以加入缓存机制，避免频繁切换同一角色时反复读取磁盘。
+    /// TODO: 后续可以增加异步加载版本，避免大角色包在主线程中读取造成卡顿。
+    /// </para>
+    /// </remarks>
     public class CharacterPackageLoader
     {
+        /// <summary>
+        /// JSON 反序列化设置。
+        /// </summary>
+        /// <remarks>
+        /// 当前允许 JSON 中存在代码未声明的字段，便于角色包配置向后兼容。
+        /// </remarks>
         private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
         {
             MissingMemberHandling = MissingMemberHandling.Ignore,
@@ -26,8 +52,13 @@ namespace Project.Character
 
         /// <summary>
         /// 加载角色包。
-        /// 如果加载失败，直接抛出异常。
         /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <returns>返回已经加载进内存的角色包数据。</returns>
+        /// <exception cref="ArgumentNullException">当 <paramref name="packageInfo"/> 为 null 时抛出。</exception>
+        /// <exception cref="DirectoryNotFoundException">当角色包目录不存在时抛出。</exception>
+        /// <exception cref="FileNotFoundException">当 character.json 不存在时抛出。</exception>
+        /// <exception cref="InvalidDataException">当 JSON 解析结果为空时抛出。</exception>
         public CharacterPackageData Load(CharacterPackageInfo packageInfo)
         {
             if (packageInfo == null)
@@ -45,8 +76,7 @@ namespace Project.Character
                 throw new FileNotFoundException($"缺少 character.json：{packageInfo.CharacterJsonPath}");
             }
 
-            CharacterDefinition definition =
-                LoadJsonFile<CharacterDefinition>(packageInfo.CharacterJsonPath, "character.json");
+            CharacterDefinition definition = LoadJsonFile<CharacterDefinition>(packageInfo.CharacterJsonPath, "character.json");
 
             var data = new CharacterPackageData
             {
@@ -65,9 +95,15 @@ namespace Project.Character
         }
 
         /// <summary>
-        /// 尝试加载角色包。
-        /// 不抛异常，适合在 DeveloperConsole 中调用。
+        /// 尝试加载角色包，不向外抛出异常。
         /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="data">加载成功时返回角色包数据；失败时为 null。</param>
+        /// <param name="errorMessage">加载失败时返回错误信息；成功时为空字符串。</param>
+        /// <returns>加载成功返回 true，加载失败返回 false。</returns>
+        /// <remarks>
+        /// 适合 DeveloperConsole、角色包列表扫描等不希望异常中断流程的场景。
+        /// </remarks>
         public bool TryLoad(
             CharacterPackageInfo packageInfo,
             out CharacterPackageData data,
@@ -87,6 +123,12 @@ namespace Project.Character
             }
         }
 
+        /// <summary>
+        /// 解析 model3.json 的绝对路径。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入路径信息的角色包数据对象。</param>
         private static void LoadModelPath(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -101,6 +143,12 @@ namespace Project.Character
             data.Model3JsonAbsolutePath = packageInfo.ResolvePath(definition.Model.Model3JsonPath);
         }
 
+        /// <summary>
+        /// 读取 persona 文本文件。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入文本和路径信息的角色包数据对象。</param>
         private static void LoadPersona(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -118,6 +166,12 @@ namespace Project.Character
             data.PersonaText = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
         }
 
+        /// <summary>
+        /// 读取 Prompt 模板文本文件。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入文本和路径信息的角色包数据对象。</param>
         private static void LoadPromptTemplate(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
@@ -125,8 +179,7 @@ namespace Project.Character
         {
             string promptTemplateFile = "prompt_template.txt";
 
-            if (definition.Persona != null &&
-                !string.IsNullOrWhiteSpace(definition.Persona.PromptTemplateFile))
+            if (definition.Persona != null && !string.IsNullOrWhiteSpace(definition.Persona.PromptTemplateFile))
             {
                 promptTemplateFile = definition.Persona.PromptTemplateFile;
             }
@@ -136,13 +189,18 @@ namespace Project.Character
             data.PromptTemplateText = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
         }
 
+        /// <summary>
+        /// 读取 expression_mapping.json。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入映射表和路径信息的角色包数据对象。</param>
         private static void LoadExpressionMapping(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
             CharacterPackageData data)
         {
-            if (definition.Mapping == null ||
-                string.IsNullOrWhiteSpace(definition.Mapping.ExpressionMappingFile))
+            if (definition.Mapping == null || string.IsNullOrWhiteSpace(definition.Mapping.ExpressionMappingFile))
             {
                 data.ExpressionMapping = null;
                 data.ExpressionMappingAbsolutePath = string.Empty;
@@ -158,17 +216,21 @@ namespace Project.Character
                 return;
             }
 
-            data.ExpressionMapping =
-                LoadJsonFile<ExpressionMappingConfig>(path, "expression_mapping.json");
+            data.ExpressionMapping = LoadJsonFile<ExpressionMappingConfig>(path, "expression_mapping.json");
         }
 
+        /// <summary>
+        /// 读取 motion_mapping.json。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入映射表和路径信息的角色包数据对象。</param>
         private static void LoadMotionMapping(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
             CharacterPackageData data)
         {
-            if (definition.Mapping == null ||
-                string.IsNullOrWhiteSpace(definition.Mapping.MotionMappingFile))
+            if (definition.Mapping == null || string.IsNullOrWhiteSpace(definition.Mapping.MotionMappingFile))
             {
                 data.MotionMapping = null;
                 data.MotionMappingAbsolutePath = string.Empty;
@@ -184,17 +246,21 @@ namespace Project.Character
                 return;
             }
 
-            data.MotionMapping =
-                LoadJsonFile<MotionMappingConfig>(path, "motion_mapping.json");
+            data.MotionMapping = LoadJsonFile<MotionMappingConfig>(path, "motion_mapping.json");
         }
 
+        /// <summary>
+        /// 读取 voice_config.json 的原始 JSON 文本。
+        /// </summary>
+        /// <param name="packageInfo">角色包基础路径信息。</param>
+        /// <param name="definition">character.json 解析结果。</param>
+        /// <param name="data">需要写入语音配置文本和路径信息的角色包数据对象。</param>
         private static void LoadVoiceConfig(
             CharacterPackageInfo packageInfo,
             CharacterDefinition definition,
             CharacterPackageData data)
         {
-            if (definition.Voice == null ||
-                string.IsNullOrWhiteSpace(definition.Voice.VoiceConfigFile))
+            if (definition.Voice == null || string.IsNullOrWhiteSpace(definition.Voice.VoiceConfigFile))
             {
                 data.VoiceConfigJson = string.Empty;
                 data.VoiceConfigAbsolutePath = string.Empty;
@@ -206,10 +272,17 @@ namespace Project.Character
             data.VoiceConfigJson = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
         }
 
+        /// <summary>
+        /// 读取并反序列化 JSON 文件。
+        /// </summary>
+        /// <typeparam name="T">目标 DTO 类型。</typeparam>
+        /// <param name="path">JSON 文件路径。</param>
+        /// <param name="displayName">用于错误提示的文件显示名。</param>
+        /// <returns>反序列化后的对象。</returns>
+        /// <exception cref="InvalidDataException">当 JSON 解析结果为空时抛出。</exception>
         private static T LoadJsonFile<T>(string path, string displayName) where T : class
         {
             string json = File.ReadAllText(path);
-
             T result = JsonConvert.DeserializeObject<T>(json, JsonSettings);
 
             if (result == null)
