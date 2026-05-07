@@ -111,20 +111,8 @@ namespace Project.Character
                 return Path.GetFullPath(relativePath);
             }
 
-            string normalizedRelativePath = NormalizeRelativePath(relativePath);
-            return Path.GetFullPath(Path.Combine(PackageRootPath, normalizedRelativePath));
+            return CharacterPackagePathResolver.ResolvePath(PackageRootPath, relativePath);
         }
 
-        /// <summary>
-        /// 统一处理 Windows、macOS、Linux 的路径分隔符。
-        /// </summary>
-        /// <param name="relativePath">原始相对路径。</param>
-        /// <returns>使用当前操作系统路径分隔符的相对路径。</returns>
-        private static string NormalizeRelativePath(string relativePath)
-        {
-            return relativePath
-                .Replace('/', Path.DirectorySeparatorChar)
-                .Replace('\\', Path.DirectorySeparatorChar);
-        }
     }
 }

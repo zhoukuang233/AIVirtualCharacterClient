@@ -545,36 +545,17 @@ namespace Project.Character
             string standardRelativeFolder,
             out string resolvedPath)
         {
-            resolvedPath = string.Empty;
-
-            if (string.IsNullOrWhiteSpace(pathOrFileName))
+            if (packageInfo == null)
             {
+                resolvedPath = string.Empty;
                 return false;
             }
 
-            var candidates = new List<string>();
-
-            if (Path.IsPathRooted(pathOrFileName))
-            {
-                candidates.Add(Path.GetFullPath(pathOrFileName));
-            }
-            else
-            {
-                candidates.Add(packageInfo.ResolvePath(pathOrFileName));
-                candidates.Add(packageInfo.ResolvePath($"{standardRelativeFolder}/{pathOrFileName}"));
-            }
-
-            foreach (string candidate in candidates)
-            {
-                if (File.Exists(candidate))
-                {
-                    resolvedPath = candidate;
-                    return true;
-                }
-            }
-
-            resolvedPath = candidates.Count > 0 ? candidates[0] : string.Empty;
-            return false;
+            return CharacterPackagePathResolver.TryResolveResourceFile(
+                packageInfo.PackageRootPath,
+                pathOrFileName,
+                standardRelativeFolder,
+                out resolvedPath);
         }
 
         /// <summary>

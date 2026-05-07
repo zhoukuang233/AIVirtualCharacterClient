@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Project.Character;
 using Project.ExperimentLogging;
 using Project.Presentation;
@@ -15,8 +16,8 @@ namespace Project.Chat
     /// 2. 构造 ChatRequestDto。
     /// 3. 调用 MockChatBackendClient 生成结构化响应。
     /// 4. 解析 replyText、emotion、action、voiceStyle。
-    /// 5. 调用 BehaviorMappingResolver 生成表现解析结果。
-    /// 6. 把表现命令交给 PresentationCommandQueueService 执行 Debug 输出。
+    /// 5. 调用 PresentationSystem 生成表现解析结果。
+    /// 6. 把文本、表情、动作、语音命令交给 PresentationCommandQueueService 执行 Debug 输出。
     /// 7. 写入 JSONL 前端交互日志。
     ///
     /// 使用方式：
@@ -76,7 +77,7 @@ namespace Project.Chat
                 return;
             }
 
-            CharacterPackageData currentCharacter = CurrentCharacterContext.Instance.CurrentCharacter;
+            CharacterPackageData currentCharacter = CharacterSystem.Instance.CurrentCharacter;
             if (currentCharacter == null)
             {
                 Debug.LogWarning("[ChatController] 当前没有已加载角色，无法开始聊天。请确认 AppBootstrapper 已成功加载角色包。 ");
@@ -106,10 +107,25 @@ namespace Project.Chat
 
                 Debug.Log("[ChatController] 角色回复：" + response.ReplyText);
 
-                var resolver = new BehaviorMappingResolver(currentCharacter.PackageInfo.PackageRootPath);
-                resolveResult = resolver.Resolve(response.Emotion, response.Action, response.VoiceStyle);
+                EnsurePresentationSystemReady(currentCharacter);
 
-                PresentationCommandQueueService.Instance.EnqueueRange(resolveResult.ToCommands());
+                resolveResult = PresentationSystem.Instance.Resolve(
+                    response.Emotion,
+                    response.Action,
+                    response.VoiceStyle
+                );
+
+                var commands = new List<PresentationCommand>
+                {
+                    new ShowTextCommand(response.ReplyText)
+                };
+
+                if (resolveResult != null)
+                {
+                    commands.AddRange(resolveResult.ToCommands());
+                }
+
+                PresentationCommandQueueService.Instance.EnqueueRange(commands);
                 PresentationCommandQueueService.Instance.ExecuteAllDebug();
             }
             catch (Exception exception)
@@ -130,6 +146,24 @@ namespace Project.Chat
                     errorMessage
                 );
             }
+        }
+
+        /// <summary>
+        /// 确保表现系统已绑定当前角色。
+        /// </summary>
+        /// <param name="currentCharacter">当前聊天使用的角色包数据。</param>
+        /// <remarks>
+        /// 正常启动流程中 AppBootstrapper 会先初始化 PresentationSystem。这里保留兜底逻辑，
+        /// 方便单独运行 ChatController 测试场景时仍能完成表现映射。
+        /// </remarks>
+        private static void EnsurePresentationSystemReady(CharacterPackageData currentCharacter)
+        {
+            if (PresentationSystem.Instance.Initialized && PresentationSystem.Instance.CurrentCharacter == currentCharacter)
+            {
+                return;
+            }
+
+            PresentationSystem.Instance.Initialize(currentCharacter);
         }
 
         /// <summary>

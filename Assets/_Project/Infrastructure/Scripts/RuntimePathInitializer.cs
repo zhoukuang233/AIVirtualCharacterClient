@@ -162,6 +162,25 @@ namespace Project.Infrastructure
         }
 
         /// <summary>
+        /// 判断默认 UserData 中的文件是否不需要复制到运行时目录。
+        /// </summary>
+        /// <param name="fileName">文件名。</param>
+        /// <returns>应跳过复制返回 true；否则返回 false。</returns>
+        /// <remarks>
+        /// Unity 的 .meta 文件和 Git 占位文件只服务于工程管理，运行时 UserData 不需要保留。
+        /// </remarks>
+        private static bool ShouldSkipRuntimeCopy(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return true;
+            }
+
+            return fileName.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(fileName, ".gitkeep", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// 递归复制目录，只复制目标目录中不存在的文件。
         /// </summary>
         /// <param name="sourceDirectory">源目录。</param>
@@ -178,6 +197,11 @@ namespace Project.Infrastructure
             foreach (string sourceFilePath in sourceFiles)
             {
                 string fileName = Path.GetFileName(sourceFilePath);
+                if (ShouldSkipRuntimeCopy(fileName))
+                {
+                    continue;
+                }
+
                 string targetFilePath = Path.Combine(targetDirectory, fileName);
 
                 if (File.Exists(targetFilePath))

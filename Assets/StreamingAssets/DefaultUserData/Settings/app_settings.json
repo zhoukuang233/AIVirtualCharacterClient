@@ -1,0 +1,11 @@
+{
+  "activeCharacterId": "huohuo",
+  "activeServiceConfig": "service_config.json",
+  "loggingEnabled": true,
+  "developerMode": true,
+  "defaultLanguage": "zh-CN",
+  "masterVolume": 1.0,
+  "experimentMode": true,
+  "experimentId": "frontend_mvp_debug",
+  "logLevel": "full"
+}

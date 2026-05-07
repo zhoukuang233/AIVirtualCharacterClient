@@ -54,13 +54,13 @@ namespace Project.Test
                 return;
             }
 
-            if (!CurrentCharacterContext.Instance.HasCurrentCharacter)
+            if (!CharacterSystem.Instance.HasCurrentCharacter)
             {
                 Debug.LogWarning("[PresentationMappingTestRunner] 当前没有已加载角色，无法测试表现命令链。");
                 return;
             }
 
-            PresentationSystem.Instance.Initialize(CurrentCharacterContext.Instance.CurrentCharacter);
+            PresentationSystem.Instance.Initialize(CharacterSystem.Instance.CurrentCharacter);
         }
     }
 }

@@ -1,0 +1,39 @@
+{
+  "backend": {
+    "baseUrl": "http://localhost:8000",
+    "timeoutMs": 30000
+  },
+  "activeLLM": "mock",
+  "activeTTS": "mock_tts",
+  "llmProviders": {
+    "mock": {
+      "type": "mock",
+      "model": "mock-chat-client",
+      "temperature": 0.0
+    },
+    "deepseek": {
+      "type": "openai_compatible",
+      "model": "deepseek-chat",
+      "temperature": 0.7
+    },
+    "local": {
+      "type": "openai_compatible",
+      "model": "qwen2.5",
+      "temperature": 0.7
+    }
+  },
+  "ttsProviders": {
+    "mock_tts": {
+      "type": "mock",
+      "voice": "debug"
+    },
+    "edge_tts": {
+      "type": "http",
+      "voice": "zh-CN-XiaoxiaoNeural"
+    },
+    "local_vits": {
+      "type": "http",
+      "speakerId": "huohuo"
+    }
+  }
+}

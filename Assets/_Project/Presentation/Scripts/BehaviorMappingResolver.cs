@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
+using Project.Character;
 using UnityEngine;
 
 namespace Project.Presentation
@@ -44,8 +45,8 @@ namespace Project.Presentation
         private readonly string _expressionMappingPath;
         private readonly string _motionMappingPath;
 
-        private ExpressionMappingConfig _expressionConfig;
-        private MotionMappingConfig _motionConfig;
+        private Project.Character.ExpressionMappingConfig _expressionConfig;
+        private Project.Character.MotionMappingConfig _motionConfig;
 
         /// <summary>
         /// 创建行为映射解析器，并立即读取当前角色的表情和动作映射表。
@@ -73,18 +74,18 @@ namespace Project.Presentation
         /// </remarks>
         public void Reload()
         {
-            _expressionConfig = LoadJsonConfig<ExpressionMappingConfig>(_expressionMappingPath);
-            _motionConfig = LoadJsonConfig<MotionMappingConfig>(_motionMappingPath);
+            _expressionConfig = LoadJsonConfig<Project.Character.ExpressionMappingConfig>(_expressionMappingPath);
+            _motionConfig = LoadJsonConfig<Project.Character.MotionMappingConfig>(_motionMappingPath);
 
             if (_expressionConfig == null)
             {
-                _expressionConfig = new ExpressionMappingConfig();
+                _expressionConfig = new Project.Character.ExpressionMappingConfig();
                 Debug.LogWarning($"[BehaviorMappingResolver] 表情映射表读取失败，将使用空配置：{_expressionMappingPath}");
             }
 
             if (_motionConfig == null)
             {
-                _motionConfig = new MotionMappingConfig();
+                _motionConfig = new Project.Character.MotionMappingConfig();
                 Debug.LogWarning($"[BehaviorMappingResolver] 动作映射表读取失败，将使用空配置：{_motionMappingPath}");
             }
         }
@@ -125,12 +126,12 @@ namespace Project.Presentation
 
             if (string.IsNullOrWhiteSpace(requestedEmotion))
             {
-                requestedEmotion = NormalizeTag(_expressionConfig.defaultEmotion);
+                requestedEmotion = NormalizeTag(_expressionConfig.DefaultEmotion);
                 result.ExpressionFallbackUsed = true;
                 result.ExpressionFallbackReason = "输入 emotion 为空，使用 defaultEmotion。";
             }
 
-            ExpressionMappingItem item;
+            Project.Character.ExpressionMappingEntry item;
             string actualEmotion;
 
             if (TryGetExpressionItem(requestedEmotion, out actualEmotion, out item))
@@ -140,7 +141,7 @@ namespace Project.Presentation
             }
 
             string fallbackEmotion;
-            if (TryGetFallbackTarget(requestedEmotion, _expressionConfig.fallbackEmotionMap, out fallbackEmotion))
+            if (TryGetFallbackTarget(requestedEmotion, _expressionConfig.FallbackEmotionMap, out fallbackEmotion))
             {
                 if (TryGetExpressionItem(fallbackEmotion, out actualEmotion, out item))
                 {
@@ -151,24 +152,12 @@ namespace Project.Presentation
                 }
             }
 
-            string defaultEmotion = NormalizeTag(_expressionConfig.defaultEmotion);
+            string defaultEmotion = NormalizeTag(_expressionConfig.DefaultEmotion);
             if (TryGetExpressionItem(defaultEmotion, out actualEmotion, out item))
             {
                 result.ExpressionFallbackUsed = true;
                 result.ExpressionFallbackReason = $"emotion={requestedEmotion} 未命中，使用 defaultEmotion={actualEmotion}。";
                 FillExpressionResult(result, actualEmotion, item);
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_expressionConfig.defaultExpression))
-            {
-                result.ResolvedEmotion = defaultEmotion;
-                result.ExpressionFileName = _expressionConfig.defaultExpression;
-                result.ExpressionFilePath = BuildExpressionPath(_expressionConfig.defaultExpression);
-                result.ExpressionPriority = 0;
-                result.ExpressionFallbackUsed = true;
-                result.ExpressionFallbackReason = $"emotion={requestedEmotion} 未命中，且 defaultEmotion 无映射，直接使用 defaultExpression。";
-                result.ExpressionFileExists = File.Exists(result.ExpressionFilePath);
                 return;
             }
 
@@ -192,7 +181,7 @@ namespace Project.Presentation
                 result.MotionFallbackReason = "输入 action 为空，尝试使用 idle。";
             }
 
-            MotionMappingItem item;
+            Project.Character.MotionMappingEntry item;
             string actualAction;
 
             if (TryGetMotionItem(requestedAction, out actualAction, out item))
@@ -202,7 +191,7 @@ namespace Project.Presentation
             }
 
             string fallbackAction;
-            if (TryGetFallbackTarget(requestedAction, _motionConfig.fallbackActionMap, out fallbackAction))
+            if (TryGetFallbackTarget(requestedAction, _motionConfig.FallbackActionMap, out fallbackAction))
             {
                 if (TryGetMotionItem(fallbackAction, out actualAction, out item))
                 {
@@ -221,19 +210,19 @@ namespace Project.Presentation
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(_motionConfig.defaultMotion))
+            if (!string.IsNullOrWhiteSpace(_motionConfig.DefaultMotion))
             {
-                if (TryFindMotionItemByFileName(_motionConfig.defaultMotion, out actualAction, out item))
+                if (TryFindMotionItemByFileName(_motionConfig.DefaultMotion, out actualAction, out item))
                 {
                     result.MotionFallbackUsed = true;
-                    result.MotionFallbackReason = $"action={requestedAction} 未命中，使用 defaultMotion={_motionConfig.defaultMotion}。";
+                    result.MotionFallbackReason = $"action={requestedAction} 未命中，使用 defaultMotion={_motionConfig.DefaultMotion}。";
                     FillMotionResult(result, actualAction, item);
                     return;
                 }
 
                 result.ResolvedAction = "default";
-                result.MotionFileName = _motionConfig.defaultMotion;
-                result.MotionFilePath = BuildMotionPath(_motionConfig.defaultMotion);
+                result.MotionFileName = _motionConfig.DefaultMotion;
+                result.MotionFilePath = BuildMotionPath(_motionConfig.DefaultMotion);
                 result.MotionLoop = true;
                 result.MotionPriority = 0;
                 result.MotionFallbackUsed = true;
@@ -256,20 +245,20 @@ namespace Project.Presentation
         private void FillExpressionResult(
             PresentationResolveResult result,
             string resolvedEmotion,
-            ExpressionMappingItem item)
+            Project.Character.ExpressionMappingEntry item)
         {
             result.ResolvedEmotion = resolvedEmotion;
-            result.ExpressionFileName = item.expression;
-            result.ExpressionPriority = item.priority;
+            result.ExpressionFileName = item.Expression;
+            result.ExpressionPriority = item.Priority;
 
-            if (string.IsNullOrWhiteSpace(item.expression))
+            if (string.IsNullOrWhiteSpace(item.Expression))
             {
                 result.ExpressionFilePath = string.Empty;
                 result.ExpressionFileExists = true;
                 return;
             }
 
-            result.ExpressionFilePath = BuildExpressionPath(item.expression);
+            result.ExpressionFilePath = BuildExpressionPath(item.Expression);
             result.ExpressionFileExists = File.Exists(result.ExpressionFilePath);
 
             if (!result.ExpressionFileExists)
@@ -287,13 +276,13 @@ namespace Project.Presentation
         private void FillMotionResult(
             PresentationResolveResult result,
             string resolvedAction,
-            MotionMappingItem item)
+            Project.Character.MotionMappingEntry item)
         {
             result.ResolvedAction = resolvedAction;
-            result.MotionFileName = item.motion;
-            result.MotionFilePath = BuildMotionPath(item.motion);
-            result.MotionLoop = item.loop;
-            result.MotionPriority = item.priority;
+            result.MotionFileName = item.Motion;
+            result.MotionFilePath = BuildMotionPath(item.Motion);
+            result.MotionLoop = item.Loop;
+            result.MotionPriority = item.Priority;
             result.MotionFileExists = File.Exists(result.MotionFilePath);
 
             if (!result.MotionFileExists)
@@ -309,16 +298,10 @@ namespace Project.Presentation
         /// <returns>优先返回标准路径；若标准路径不存在但递归找到同名文件，则返回找到的路径。</returns>
         private string BuildExpressionPath(string expressionFileName)
         {
-            string standardPath = Path.Combine(_characterRootPath, "live2d", "expressions", expressionFileName);
-
-            if (File.Exists(standardPath))
-            {
-                return standardPath;
-            }
-
-            string live2dRootPath = Path.Combine(_characterRootPath, "live2d");
-            string foundPath = FindFileRecursively(live2dRootPath, expressionFileName);
-            return string.IsNullOrWhiteSpace(foundPath) ? standardPath : foundPath;
+            return CharacterPackagePathResolver.ResolveResourcePath(
+                _characterRootPath,
+                expressionFileName,
+                "live2d/expressions");
         }
 
         /// <summary>
@@ -331,43 +314,10 @@ namespace Project.Presentation
         /// </remarks>
         private string BuildMotionPath(string motionFileName)
         {
-            string standardPath = Path.Combine(_characterRootPath, "live2d", "motions", motionFileName);
-
-            if (File.Exists(standardPath))
-            {
-                return standardPath;
-            }
-
-            string live2dRootPath = Path.Combine(_characterRootPath, "live2d");
-            string foundPath = FindFileRecursively(live2dRootPath, motionFileName);
-            return string.IsNullOrWhiteSpace(foundPath) ? standardPath : foundPath;
-        }
-
-        /// <summary>
-        /// 在指定根目录下递归查找文件。
-        /// </summary>
-        /// <param name="rootPath">要搜索的根目录。</param>
-        /// <param name="fileName">要查找的文件名，例如 qizi.motion3.json。</param>
-        /// <returns>如果找到，返回完整路径；如果找不到，返回 null。</returns>
-        private string FindFileRecursively(string rootPath, string fileName)
-        {
-            if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(fileName))
-            {
-                return null;
-            }
-
-            if (!Directory.Exists(rootPath))
-            {
-                return null;
-            }
-
-            string[] files = Directory.GetFiles(rootPath, fileName, SearchOption.AllDirectories);
-            if (files == null || files.Length == 0)
-            {
-                return null;
-            }
-
-            return files[0];
+            return CharacterPackagePathResolver.ResolveResourcePath(
+                _characterRootPath,
+                motionFileName,
+                "live2d/motions");
         }
 
         /// <summary>
@@ -380,17 +330,17 @@ namespace Project.Presentation
         private bool TryGetExpressionItem(
             string emotion,
             out string actualEmotion,
-            out ExpressionMappingItem item)
+            out Project.Character.ExpressionMappingEntry item)
         {
             actualEmotion = null;
             item = null;
 
-            if (_expressionConfig == null || _expressionConfig.emotionMappings == null)
+            if (_expressionConfig == null || _expressionConfig.EmotionMappings == null)
             {
                 return false;
             }
 
-            foreach (KeyValuePair<string, ExpressionMappingItem> pair in _expressionConfig.emotionMappings)
+            foreach (KeyValuePair<string, Project.Character.ExpressionMappingEntry> pair in _expressionConfig.EmotionMappings)
             {
                 if (string.Equals(pair.Key, emotion, StringComparison.OrdinalIgnoreCase))
                 {
@@ -413,23 +363,23 @@ namespace Project.Presentation
         private bool TryGetMotionItem(
             string action,
             out string actualAction,
-            out MotionMappingItem item)
+            out Project.Character.MotionMappingEntry item)
         {
             actualAction = null;
             item = null;
 
-            if (_motionConfig == null || _motionConfig.actionMappings == null)
+            if (_motionConfig == null || _motionConfig.ActionMappings == null)
             {
                 return false;
             }
 
-            foreach (KeyValuePair<string, MotionMappingItem> pair in _motionConfig.actionMappings)
+            foreach (KeyValuePair<string, Project.Character.MotionMappingEntry> pair in _motionConfig.ActionMappings)
             {
                 if (string.Equals(pair.Key, action, StringComparison.OrdinalIgnoreCase))
                 {
                     actualAction = pair.Key;
                     item = pair.Value;
-                    return item != null && !string.IsNullOrWhiteSpace(item.motion);
+                    return item != null && !string.IsNullOrWhiteSpace(item.Motion);
                 }
             }
 
@@ -446,24 +396,24 @@ namespace Project.Presentation
         private bool TryFindMotionItemByFileName(
             string motionFileName,
             out string actualAction,
-            out MotionMappingItem item)
+            out Project.Character.MotionMappingEntry item)
         {
             actualAction = null;
             item = null;
 
-            if (_motionConfig == null || _motionConfig.actionMappings == null)
+            if (_motionConfig == null || _motionConfig.ActionMappings == null)
             {
                 return false;
             }
 
-            foreach (KeyValuePair<string, MotionMappingItem> pair in _motionConfig.actionMappings)
+            foreach (KeyValuePair<string, Project.Character.MotionMappingEntry> pair in _motionConfig.ActionMappings)
             {
                 if (pair.Value == null)
                 {
                     continue;
                 }
 
-                if (string.Equals(pair.Value.motion, motionFileName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(pair.Value.Motion, motionFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     actualAction = pair.Key;
                     item = pair.Value;
@@ -551,73 +501,5 @@ namespace Project.Presentation
             return tag.Trim().ToLowerInvariant();
         }
 
-        /// <summary>
-        /// 表情映射表配置。
-        /// </summary>
-        private class ExpressionMappingConfig
-        {
-            public string defaultEmotion = "neutral";
-
-            /// <summary>
-            /// 默认表情文件。
-            /// </summary>
-            /// <remarks>
-            /// 空字符串表示恢复模型默认表情状态，而不是强制绑定 normal.exp3.json。
-            /// </remarks>
-            public string defaultExpression = string.Empty;
-
-            public Dictionary<string, ExpressionMappingItem> emotionMappings = new Dictionary<string, ExpressionMappingItem>();
-            public Dictionary<string, string> fallbackEmotionMap = new Dictionary<string, string>();
-        }
-
-        /// <summary>
-        /// 单个 emotion 到表情文件的映射项。
-        /// </summary>
-        private class ExpressionMappingItem
-        {
-            /// <summary>
-            /// 表情文件名。允许为空字符串，表示恢复 Live2D 默认表情状态。
-            /// </summary>
-            public string expression = string.Empty;
-
-            public int priority;
-
-            /// <summary>
-            /// 映射说明字段，主要用于开发者控制台展示、调试和论文说明。
-            /// </summary>
-            public string description;
-        }
-
-        /// <summary>
-        /// 动作映射表配置。
-        /// </summary>
-        private class MotionMappingConfig
-        {
-            /// <summary>
-            /// 默认动作文件。
-            /// </summary>
-            /// <remarks>
-            /// 不同 Live2D 模型的默认动作命名可能不同，因此不在代码中写死 idle.motion3.json。
-            /// </remarks>
-            public string defaultMotion = string.Empty;
-
-            public Dictionary<string, MotionMappingItem> actionMappings = new Dictionary<string, MotionMappingItem>();
-            public Dictionary<string, string> fallbackActionMap = new Dictionary<string, string>();
-        }
-
-        /// <summary>
-        /// 单个 action 到动作文件的映射项。
-        /// </summary>
-        private class MotionMappingItem
-        {
-            public string motion;
-            public bool loop;
-            public int priority;
-
-            /// <summary>
-            /// 映射说明字段，主要用于开发者控制台展示、调试和论文说明。
-            /// </summary>
-            public string description;
-        }
     }
 }

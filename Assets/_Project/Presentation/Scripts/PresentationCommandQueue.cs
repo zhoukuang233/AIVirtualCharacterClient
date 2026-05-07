@@ -104,41 +104,17 @@ namespace Project.Presentation
         }
 
         /// <summary>
-        /// 当前阶段以统一、简洁的 Debug 日志执行一条表现命令。
+        /// 当前阶段执行一条表现命令的 Debug 版本。
         /// </summary>
         /// <param name="command">待执行命令。</param>
+        /// <remarks>
+        /// 具体输出格式由各个命令自己的 ExecuteDebug 决定。队列只负责调度，
+        /// 不再通过类型判断拆解 Expression / Motion / Voice，避免队列和具体命令强耦合。
+        /// </remarks>
         private void ExecuteSingleDebug(PresentationCommand command)
         {
             if (command == null)
             {
-                return;
-            }
-
-            ShowTextCommand showTextCommand = command as ShowTextCommand;
-            if (showTextCommand != null)
-            {
-                Debug.Log($"[PresentationCommandQueue] ShowText: {showTextCommand.Text}");
-                return;
-            }
-
-            ExpressionCommand expressionCommand = command as ExpressionCommand;
-            if (expressionCommand != null)
-            {
-                Debug.Log($"[PresentationCommandQueue] PlayExpression: {expressionCommand.ExpressionFileName}");
-                return;
-            }
-
-            MotionCommand motionCommand = command as MotionCommand;
-            if (motionCommand != null)
-            {
-                Debug.Log($"[PresentationCommandQueue] PlayMotion: {motionCommand.MotionFileName}");
-                return;
-            }
-
-            VoiceCommand voiceCommand = command as VoiceCommand;
-            if (voiceCommand != null)
-            {
-                Debug.Log($"[PresentationCommandQueue] PlayVoice: {voiceCommand.VoiceStyle}");
                 return;
             }
 
