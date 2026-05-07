@@ -96,15 +96,53 @@ namespace Project.Presentation
         /// </remarks>
         public void ExecuteAllDebug()
         {
-            Debug.Log($"[PresentationCommandQueue] 开始执行表现命令，Count={_commands.Count}");
-
             while (_commands.Count > 0)
             {
                 PresentationCommand command = _commands.Dequeue();
-                command.ExecuteDebug();
+                ExecuteSingleDebug(command);
+            }
+        }
+
+        /// <summary>
+        /// 当前阶段以统一、简洁的 Debug 日志执行一条表现命令。
+        /// </summary>
+        /// <param name="command">待执行命令。</param>
+        private void ExecuteSingleDebug(PresentationCommand command)
+        {
+            if (command == null)
+            {
+                return;
             }
 
-            Debug.Log("[PresentationCommandQueue] 表现命令执行结束。");
+            ShowTextCommand showTextCommand = command as ShowTextCommand;
+            if (showTextCommand != null)
+            {
+                Debug.Log($"[PresentationCommandQueue] ShowText: {showTextCommand.Text}");
+                return;
+            }
+
+            ExpressionCommand expressionCommand = command as ExpressionCommand;
+            if (expressionCommand != null)
+            {
+                Debug.Log($"[PresentationCommandQueue] PlayExpression: {expressionCommand.ExpressionFileName}");
+                return;
+            }
+
+            MotionCommand motionCommand = command as MotionCommand;
+            if (motionCommand != null)
+            {
+                Debug.Log($"[PresentationCommandQueue] PlayMotion: {motionCommand.MotionFileName}");
+                return;
+            }
+
+            VoiceCommand voiceCommand = command as VoiceCommand;
+            if (voiceCommand != null)
+            {
+                Debug.Log($"[PresentationCommandQueue] PlayVoice: {voiceCommand.VoiceStyle}");
+                return;
+            }
+
+            command.ExecuteDebug();
         }
     }
 }

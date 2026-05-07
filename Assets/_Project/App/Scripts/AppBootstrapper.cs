@@ -1,34 +1,50 @@
 using Project.Character;
 using Project.Infrastructure;
+using Project.Presentation;
 using UnityEngine;
 
 namespace Project.App
 {
     /// <summary>
     /// 应用启动入口。
-    ///
-    /// 功能：
-    /// 1. 作为整个 Unity 前端的启动引导器，全局只允许存在一个实例。
-    /// 2. 初始化运行时目录，包括 UserData、Characters、Services、Logs、Experiments。
-    /// 3. 输出初始化结果，方便开发阶段检查 persistentDataPath 是否正确。
-    /// 4. 尝试加载第一个可用角色，为后续 ChatSystem 和 PresentationSystem 提供当前角色上下文。
-    ///
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 本类负责把 Unity 前端从“空场景”推进到可测试状态。当前阶段的启动流程是：
+    /// 初始化运行时 UserData 目录，扫描并加载第一个有效角色包，初始化表现映射系统，
+    /// 最后进入 TestReady 状态。
+    /// </para>
+    /// <para>
+    /// 重要边界：
+    /// 1. AppBootstrapper 只编排启动流程，不直接读取角色包文件。
+    /// 2. 角色扫描、校验、加载统一交给 <see cref="CharacterSystem"/>。
+    /// 3. 表现映射初始化统一交给 <see cref="PresentationSystem"/>。
+    /// </para>
+    /// <para>
     /// 使用方式：
     /// 1. 在启动场景中创建一个空物体，例如 GameEntry。
     /// 2. 将 AppBootstrapper 挂载到该物体上。
-    /// 3. 运行游戏后，本类会自动执行初始化逻辑。
-    ///
+    /// 3. 运行场景后，本类会自动完成路径初始化、角色加载和表现映射初始化。
+    /// </para>
+    /// <para>
     /// 对外暴露：
-    /// - 通过 AppBootstrapper.Instance 获取全局启动器实例。
-    ///
-    /// TODO：
-    /// - 接入 SettingsSystem，根据配置加载默认角色，而不是直接加载第一个可用角色。
-    /// - 接入 ServiceSystem，读取后端服务配置。
-    /// - 接入 GameStateMachine，管理启动、等待输入、请求中、表现播放等状态。
-    /// - 接入 ExperimentLogging，记录启动阶段日志。
-    /// </summary>
+    /// - Instance：通过 SingletonMonoBehaviour 提供的全局单例实例。
+    /// - CurrentStartupState：当前启动状态。
+    /// </para>
+    /// <para>
+    /// TODO: 后续接入 SettingsSystem 后，应根据 activeCharacterId 加载默认角色，而不是加载第一个有效角色。
+    /// TODO: 后续接入 ServiceSystem 后，应在启动阶段读取后端地址、超时时间和当前服务配置名。
+    /// TODO: 后续接入 GameStateMachine 后，应把 StartupState 替换成正式状态机状态。
+    /// TODO: 后续接入 ExperimentLogging 后，应记录启动耗时、角色包版本和初始化错误。
+    /// </para>
+    /// </remarks>
     public class AppBootstrapper : SingletonMonoBehaviour<AppBootstrapper>
     {
+        /// <summary>
+        /// 当前启动状态。
+        /// </summary>
+        public AppStartupState CurrentStartupState { get; private set; } = AppStartupState.NotStarted;
+
         /// <summary>
         /// AppBootstrapper 是全局启动入口，应该跨场景保留。
         /// </summary>
@@ -39,103 +55,148 @@ namespace Project.App
 
         /// <summary>
         /// 单例初始化完成后的启动流程。
-        ///
-        /// 功能：
-        /// 1. 初始化运行时路径。
-        /// 2. 打印初始化结果。
-        /// 3. 尝试加载第一个有效角色包。
-        ///
-        /// 参数：
-        /// 无。
-        ///
-        /// 返回：
-        /// 无。
         /// </summary>
+        /// <remarks>
+        /// 当前启动阶段按固定顺序执行：
+        /// RuntimePathInitializer -> CharacterSystem -> PresentationSystem -> TestReady。
+        /// 任一步失败都会提前停止，并把 CurrentStartupState 设置为 Failed。
+        /// </remarks>
         protected override void OnSingletonAwake()
         {
+            StartFrontend();
+        }
+
+        /// <summary>
+        /// 执行 AI 虚拟角色 Unity 前端启动流程。
+        /// </summary>
+        private void StartFrontend()
+        {
+            CurrentStartupState = AppStartupState.Starting;
             Debug.Log("[AppBootstrapper] AI 虚拟角色前端启动。");
 
-            RuntimePathInitializeResult result = RuntimePathInitializer.Initialize();
-
-            if (!result.Success)
+            if (!InitializeRuntimePaths())
             {
-                Debug.LogError($"[AppBootstrapper] 运行时路径初始化失败：{result.ErrorMessage}");
+                CurrentStartupState = AppStartupState.Failed;
                 return;
             }
 
-            LogRuntimePathInitializeResult(result);
-            TryLoadInitialCharacter();
+            if (!LoadInitialCharacter(out CharacterPackageData characterData))
+            {
+                CurrentStartupState = AppStartupState.Failed;
+                return;
+            }
+
+            if (!InitializePresentationSystem(characterData))
+            {
+                CurrentStartupState = AppStartupState.Failed;
+                return;
+            }
+
+            CurrentStartupState = AppStartupState.TestReady;
+            Debug.Log("[AppBootstrapper] 进入 TestReady 状态。");
         }
 
         /// <summary>
-        /// 输出运行时目录初始化结果。
-        ///
-        /// 参数：
-        /// result：RuntimePathInitializer.Initialize 返回的初始化结果。
-        ///
-        /// 返回：
-        /// 无。
+        /// 初始化运行时目录和默认 UserData。
         /// </summary>
-        private void LogRuntimePathInitializeResult(RuntimePathInitializeResult result)
+        /// <returns>初始化成功返回 true；失败返回 false。</returns>
+        private bool InitializeRuntimePaths()
         {
-            Debug.Log($"[AppBootstrapper] UserData 根目录：{result.UserDataRootPath}");
-            Debug.Log($"[AppBootstrapper] Characters 目录：{RuntimePathInitializer.CharactersPath}");
-            Debug.Log($"[AppBootstrapper] Services 目录：{RuntimePathInitializer.ServicesPath}");
-            Debug.Log($"[AppBootstrapper] Logs 目录：{RuntimePathInitializer.LogsPath}");
-            Debug.Log($"[AppBootstrapper] Experiments 目录：{RuntimePathInitializer.ExperimentsPath}");
-
-            if (result.CreatedDirectories.Count > 0)
+            RuntimePathInitializeResult result = RuntimePathInitializer.Initialize();
+            if (!result.Success)
             {
-                Debug.Log($"[AppBootstrapper] 本次新建目录数量：{result.CreatedDirectories.Count}");
+                Debug.LogError($"[AppBootstrapper] 运行时路径初始化失败：{result.ErrorMessage}");
+                return false;
             }
 
-            if (result.CopiedFiles.Count > 0)
-            {
-                Debug.Log($"[AppBootstrapper] 本次复制默认文件数量：{result.CopiedFiles.Count}");
-            }
-
-            if (result.Warnings.Count > 0)
-            {
-                foreach (string warning in result.Warnings)
-                {
-                    Debug.LogWarning($"[AppBootstrapper] 初始化警告：{warning}");
-                }
-            }
+            LogRuntimePathWarnings(result);
+            return true;
         }
 
         /// <summary>
-        /// 尝试加载启动阶段的当前角色。
-        ///
-        /// 当前策略：
-        /// 扫描 Characters 目录，加载第一个通过校验的角色包。
-        ///
-        /// 后续策略：
-        /// 应该从 SettingsSystem 中读取 activeCharacterId，然后按 ID 加载。
-        ///
-        /// 参数：
-        /// 无。
-        ///
-        /// 返回：
-        /// 无。
+        /// 加载启动阶段使用的默认角色。
         /// </summary>
-        private void TryLoadInitialCharacter()
+        /// <param name="characterData">加载成功时输出角色包数据。</param>
+        /// <returns>加载成功返回 true；失败返回 false。</returns>
+        private bool LoadInitialCharacter(out CharacterPackageData characterData)
         {
-            bool loaded = CurrentCharacterContext.Instance.TryLoadFirstValidCharacter(
-                out CharacterPackageData characterData,
+            bool loaded = CharacterSystem.Instance.TryLoadFirstValidCharacter(
+                out characterData,
+                out CharacterValidationResult validationResult,
                 out string message
             );
 
             if (!loaded)
             {
                 Debug.LogWarning($"[AppBootstrapper] 启动角色加载失败：{message}");
+                return false;
+            }
+
+            if (validationResult != null && validationResult.Warnings.Count > 0)
+            {
+                foreach (string warning in validationResult.Warnings)
+                {
+                    Debug.LogWarning($"[AppBootstrapper] 当前角色校验警告：{warning}");
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 初始化表现映射系统。
+        /// </summary>
+        /// <param name="characterData">当前启动角色数据。</param>
+        /// <returns>初始化成功返回 true；失败返回 false。</returns>
+        private bool InitializePresentationSystem(CharacterPackageData characterData)
+        {
+            bool initialized = PresentationSystem.Instance.Initialize(characterData);
+            if (!initialized)
+            {
+                Debug.LogError("[AppBootstrapper] 表现映射初始化失败。");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 输出运行时路径初始化阶段的警告信息。
+        /// </summary>
+        /// <param name="result">运行时路径初始化结果。</param>
+        private void LogRuntimePathWarnings(RuntimePathInitializeResult result)
+        {
+            if (result.Warnings.Count == 0)
+            {
                 return;
             }
 
-            Debug.Log(
-                "[AppBootstrapper] 启动角色加载成功：" +
-                $"CharacterId={characterData.CharacterId}, " +
-                $"CharacterName={characterData.CharacterName}"
-            );
+            foreach (string warning in result.Warnings)
+            {
+                Debug.LogWarning($"[AppBootstrapper] 初始化警告：{warning}");
+            }
         }
+    }
+
+    /// <summary>
+    /// AppBootstrapper 当前启动状态。
+    /// </summary>
+    /// <remarks>
+    /// 当前只是轻量枚举，用于替代散落的 bool 标记。后续如果引入正式 GameStateMachine，
+    /// 可以把这里的状态迁移到统一状态机中。
+    /// </remarks>
+    public enum AppStartupState
+    {
+        /// <summary>尚未开始启动。</summary>
+        NotStarted,
+
+        /// <summary>正在启动。</summary>
+        Starting,
+
+        /// <summary>测试准备完成，可以进行离线聊天闭环或 DeveloperConsole 测试。</summary>
+        TestReady,
+
+        /// <summary>启动失败。</summary>
+        Failed
     }
 }

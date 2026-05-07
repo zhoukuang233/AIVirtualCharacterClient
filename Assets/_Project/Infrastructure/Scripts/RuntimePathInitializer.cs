@@ -104,6 +104,8 @@ namespace Project.Infrastructure
 
                 result.Success = true;
                 result.UserDataRootPath = UserDataRootPath;
+
+                Debug.Log("[RuntimePathInitializer] UserData 初始化完成。");
             }
             catch (Exception ex)
             {
